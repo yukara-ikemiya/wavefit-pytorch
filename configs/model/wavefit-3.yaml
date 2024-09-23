@@ -1,0 +1,54 @@
+
+generator:
+
+  model:
+    _target_: model.WaveFit
+    # Number of WaveFit iteration (e.g. WaveFit-5 -> 5)
+    num_iteration: 3
+    # Mel-spectrogram setting
+    args_mel:
+      sr: 24000
+      n_fft: 2048
+      win_size: 1200
+      hop_size: 300   # You cannot change this parameter as long as you use the default WaveGrad generator
+      n_mels: 128
+      fmin: 20.0
+      fmax: 12000.0
+
+
+discriminator:
+
+  model:
+    _target_: model.Discriminator
+    num_D: 3
+    ndf: 16
+    n_layers: 4
+    downsampling_factor: 4
+
+
+loss:
+
+  mrstft:
+    _target_: loss.MRSTFTLoss
+    n_ffts: [512, 1024, 2048]
+    win_sizes: [360, 900, 1800]
+    hop_sizes: [80, 150, 300]
+
+  melmae:
+    _target_: loss.MELMAELoss
+    sr: 24000
+    n_fft: 1024
+    win_size: 900
+    hop_size: 150
+    n_mels: 128
+    fmin: 20.0
+    fmax: 12000.
+
+  # Weights of each loss
+  # This is the LibriTTS setting in the WaveFit paper (Sec.5.1)
+  lambdas:
+    G/disc_gan_loss: 1.0
+    G/disc_feat_loss: 10.0
+    G/mrstft_sc_loss: 2.5
+    G/mrstft_mag_loss: 2.5
+    G/mel_mae_loss: 0.0

@@ -1,0 +1,16 @@
+defaults:
+  - model: wavefit-3
+  - data: default
+  - trainer: default
+  - optimizer: default
+  - _self_
+
+# no hydra logging
+hydra:
+  output_subdir: null
+  run:
+    dir: .
+  # multirun
+  sweep:
+    dir: .
+

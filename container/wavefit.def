@@ -1,0 +1,19 @@
+# Pytorch 24.01 -> CUDA 12.3.2, PyTorch 2.2.0
+Bootstrap: docker
+From: nvcr.io/nvidia/pytorch:24.01-py3
+
+%post
+    apt-get update && python -m pip install --upgrade pip
+    
+    # pip
+    python -m pip install --no-cache-dir setuptools wheel
+
+    python -m pip install --no-cache-dir torchaudio
+
+    python -m pip install --no-cache-dir numpy librosa pillow
+
+    python -m pip install --no-cache-dir -U accelerate hydra-core wandb
+
+
+%environment
+    export PYTHONIOENCODING=utf-8

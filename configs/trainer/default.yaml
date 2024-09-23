@@ -1,0 +1,38 @@
+
+# Root directory for outputs
+output_dir: ???
+
+# Checkpoint directory for resuming training
+ckpt_dir: null
+
+# Batch size
+# NOTE: Batch size must be a multiple of GPU number
+batch_size: 1
+num_workers: 2
+
+# Seed value used for rng initialization
+seed: 0
+
+# Automatic mixed precision
+# Choose from ‘no’,‘fp16’,‘bf16’ or ‘fp8’.
+amp: 'no' # 'fp16'
+
+# Max norm of gradient clipping
+max_grad_norm: 1.0
+
+logger:
+  project_name: 'project_name'
+  run_name: 'run_name'
+
+logging:
+  # Step interval for logging metrics / saving checkpoints
+  # / generating samples / test (validation) / printing metrics
+  n_step_log: 20
+  n_step_ckpt: 10000
+  n_step_sample: 2000
+  n_step_test: 1000
+  n_step_print: 1000
+  # Number of generated samples
+  n_samples: 2
+
+  metrics_for_best_ckpt: ['G/mrstft_sc_loss','G/mrstft_mag_loss']

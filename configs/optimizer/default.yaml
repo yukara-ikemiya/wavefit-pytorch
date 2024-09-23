@@ -1,0 +1,34 @@
+
+# Generator
+
+G:
+  optimizer:
+    _partial_: true
+    _target_: torch.optim.AdamW
+    betas: [0.8, 0.99]
+    lr: 0.0001
+    weight_decay: 0.001
+
+  scheduler:
+    _partial_: true
+    _target_: utils.scheduler.InverseLR
+    inv_gamma: 200000
+    power: 0.5
+    warmup: 0.999
+
+# Discriminator
+
+D:
+  optimizer:
+    _partial_: true
+    _target_: torch.optim.AdamW
+    betas: [0.8, 0.99]
+    lr: 0.0002
+    weight_decay: 0.001
+
+  scheduler:
+    _partial_: true
+    _target_: utils.scheduler.InverseLR
+    inv_gamma: 200000
+    power: 0.5
+    warmup: 0.999

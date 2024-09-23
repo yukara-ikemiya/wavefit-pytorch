@@ -1,0 +1,26 @@
+
+batchsize: 1
+
+train:
+  _target_: data.AudioFilesDataset
+  dir_list: []
+  sample_size: 36000
+  sample_rate: 24000
+  out_channels: 'mono'
+  exts: ['wav']
+  augment_shift: True
+  augment_flip: True
+  augment_volume: True
+  max_samples: null
+
+test:
+  _target_: data.AudioFilesDataset
+  dir_list: []
+  sample_size: 36000
+  sample_rate: 24000
+  out_channels: 'mono'
+  exts: ['wav']
+  augment_shift: False
+  augment_flip: False
+  augment_volume: False
+  max_samples: null

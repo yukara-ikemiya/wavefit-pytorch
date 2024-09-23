@@ -1,0 +1,9 @@
+torch>=2.1.0
+torchaudio
+numpy
+librosa
+pillow
+
+accelerate
+hydra-core
+wandb
