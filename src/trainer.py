@@ -43,8 +43,9 @@ class Trainer:
         self.loss_lambdas = cfg.model.loss.lambdas
         self.EPS = 1e-8
 
-        self.logger = MetricsLogger()        # Logger for WandB
-        self.logger_print = MetricsLogger()  # Logger for printing
+        self.logger = MetricsLogger()           # Logger for WandB
+        self.logger_print = MetricsLogger()     # Logger for printing
+        self.logger_test = MetricsLogger()      # Logger for test
 
         self.states = {'global_step': 0, 'best_metrics': float('inf'), 'latest_metrics': float('inf')}
 
@@ -141,11 +142,18 @@ class Trainer:
         if train:
             self.opt_D.zero_grad()
 
+        loss_d_real = self.D.compute_D_loss(audios, mode='real')['D/loss']
+
         # NOTE: Discriminator loss is also computed for all intermediate predictions (Sec.4.2)
+        loss_d_fake = 0.
         for idx, pred in enumerate(preds):
-            loss_d = self.D.compute_D_loss(pred.detach(), audios)['D/loss']
-            losses['D/loss'] = losses.get('D/loss', 0.) + loss_d / len(preds)
-            losses[f'D/loss/iter-{idx+1}'] = loss_d.detach()  # for logging
+            loss_d_fake_ = self.D.compute_D_loss(pred.detach(), mode='fake')['D/loss']
+            loss_d_fake += loss_d_fake_ / len(preds)
+            losses[f'D/loss/iter-{idx+1}'] = loss_d_fake_.detach()  # for logging
+
+        losses['D/loss/real'] = loss_d_real.detach()
+        losses['D/loss/fake'] = loss_d_fake.detach()
+        losses['D/loss'] = loss_d_real + loss_d_fake
 
         if train:
             self.accel.backward(losses['D/loss'])
@@ -165,16 +173,15 @@ class Trainer:
         end = torch.cuda.Event(enable_timing=True)
         start.record()
 
-        logger_test = MetricsLogger()
         for batch in self.test_dataloader:
             metrics = self.run_step(batch, train=False)
-            logger_test.add(metrics)
+            self.logger_test.add(metrics)
 
         end.record()
         torch.cuda.synchronize()
         p_time = start.elapsed_time(end) / 1000.  # [sec]
 
-        metrics = logger_test.pop()
+        metrics = self.logger_test.pop()
         # gather from all processes
         metrics_g = {}
         for k, v in metrics.items():

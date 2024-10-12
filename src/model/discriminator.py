@@ -145,22 +145,21 @@ class Discriminator(nn.Module):
 
         return losses
 
-    def compute_D_loss(self, x_fake, x_real):
+    def compute_D_loss(self, x, mode: str):
         """
         The eq.(7) loss
         """
-        assert x_fake.shape == x_real.shape
+        assert mode in ['fake', 'real']
+        sign = 1 if mode == 'fake' else -1
 
-        out_f = self(x_fake, return_feature=False)
-        out_r = self(x_real, return_feature=False)
+        out = self(x, return_feature=False)
 
         num_D = len(self.model)
         losses = {'D/loss': 0.}
 
         for i_d in range(num_D):
             # Hinge loss
-            losses['D/loss'] += (1 + out_f[i_d][-1]).relu().mean()
-            losses['D/loss'] += (1 - out_r[i_d][-1]).relu().mean()
+            losses['D/loss'] += (1 + sign * out[i_d][-1]).relu().mean()
 
         losses['D/loss'] /= num_D
 
