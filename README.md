@@ -16,11 +16,9 @@ This repository supports:
 
 ## Building a training environment
 
-To simplify setting up the training environment, I recommend to use container systems like `Docker` or `Singularity` instead of installing dependencies on each GPU machine. Below are the steps for creating Docker and Singularity containers. 
+To simplify setting up the training environment, I recommend to use container systems like `Docker` or `Singularity` instead of installing dependencies on each GPU machine. Below are the steps for creating `Singularity` containers. 
 
 All example scripts are stored at the [container](container/) folder.
-
-The following is an example of environment setup using `Singularity`.
 
 ### 1. Install Singularity
 
@@ -138,6 +136,27 @@ torchrun --nproc_per_node gpu ${ROOT_DIR}/src/train.py \
     trainer.output_dir=${OUTPUT_DIR}
 ```
 
+# Inference
+
+Using pre-trained WaveFit models, you can perform inference with audio signals as input
+(e.g. for evaluation).
+
+The [`inference.py`](src/inference.py) perform inference for all of audio files in a target directory.
+To check other options for the script, please use `-h` option.
+
+```bash
+CKPT_DIR="output_dir/ckpt/latest/"
+AUDIO_DIR="path/to/target/speech/directory/"
+
+singularity exec --nv --pwd $ROOT_DIR -B $ROOT_DIR -B $AUDIO_DIR \
+    --env MASTER_PORT=${PORT} \
+    ${CONTAINER_PATH} \
+torchrun --nproc_per_node gpu --master_port ${PORT} \
+${ROOT_DIR}/src/inference.py \
+    --ckpt-dir ${CKPT_DIR} \
+    --input-audio-dir ${AUDIO_DIR} \
+    --output-dir ${OUTPUT_DIR}
+```
 
 # 🤔 Unclear points in the implementation
 
@@ -207,7 +226,7 @@ Additionally, based on insights into stability in GAN training, I have incorpora
 
 # TODO
 
-- [ ] Useful inference scripts
+- [x] Useful inference scripts
 
 # References
 

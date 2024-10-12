@@ -14,7 +14,7 @@ import hydra
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
 
-from utils.torch_common import get_rank, get_world_size, count_parameters, set_seed
+from utils.torch_common import get_world_size, count_parameters, set_seed
 from trainer import Trainer
 
 

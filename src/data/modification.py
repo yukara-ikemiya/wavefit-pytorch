@@ -2,9 +2,7 @@
 Copyright (C) 2024 Yukara Ikemiya
 """
 
-import math
 import random
-import typing as tp
 
 import torch
 from torch import nn
@@ -35,7 +33,7 @@ class Stereo(nn.Module):
         return x
 
 
-# Augumentation
+# Augmentation
 
 class PhaseFlipper(nn.Module):
     """Randomly invert the phase of a signal"""
