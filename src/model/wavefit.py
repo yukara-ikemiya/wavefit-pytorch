@@ -13,6 +13,7 @@ class WaveFit(nn.Module):
     def __init__(
         self,
         num_iteration: int,
+        memory_efficient_miipher2: bool = False,
         args_mel: dict = {
             'sr': 24000,
             'n_fft': 2048,
@@ -26,9 +27,10 @@ class WaveFit(nn.Module):
         super().__init__()
 
         self.T = num_iteration
+        self.memory_efficient_miipher2 = memory_efficient_miipher2
         self.args_mel = args_mel
         self.mel = MelSpectrogram(**args_mel)
-        self.generator = Generator(num_iteration)
+        self.generator = Generator(num_iteration, memory_efficient=memory_efficient_miipher2)
         self.EPS = 1e-8
 
     def forward(

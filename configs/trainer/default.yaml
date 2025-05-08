@@ -30,7 +30,7 @@ logging:
   n_step_log: 20
   n_step_ckpt: 10000
   n_step_sample: 2000
-  n_step_test: 1000
+  n_step_test: 10000
   n_step_print: 1000
   # Number of generated samples
   n_samples: 2

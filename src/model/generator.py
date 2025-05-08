@@ -5,6 +5,7 @@ Adapted from the following repo's code under Apache License 2.0.
 https://github.com/lmnt-com/wavegrad/
 """
 
+import typing as tp
 import math
 
 import torch
@@ -23,11 +24,18 @@ class Conv1d(nn.Conv1d):
 
 
 class SinusoidalPositionalEncoding(nn.Module):
-    def __init__(self, dim: int, max_iter: int):
+    def __init__(self, dim: int, max_iter: int, use_conv: bool):
         super().__init__()
         self.dim = dim
         self.max_iter = max_iter
+        self.use_conv = use_conv
         assert dim % 2 == 0
+
+        if use_conv:
+            # 1x1 conv
+            self.conv = nn.Conv1d(dim, dim, 1)
+            nn.init.xavier_uniform_(self.conv.weight)
+            nn.init.zeros_(self.conv.bias)
 
         # pre-compute positional embedding
         pos_embs = self.prepare_embedding()  # (max_iter, dim)
@@ -43,7 +51,11 @@ class SinusoidalPositionalEncoding(nn.Module):
           x_with_pos: (bs, dim, T)
         """
         assert 0 <= t < self.max_iter, f"Invalid step index {t}. It must be 0 <= t < {self.max_iter} = max_iter."
-        return x + self.pos_embs[t][None, :, None]
+        pos_emb = self.pos_embs[t][None, :, None]
+        if self.use_conv:
+            pos_emb = self.conv(pos_emb)
+
+        return x + pos_emb
 
     def prepare_embedding(self, scale: float = 5000.):
         dim_h = self.dim // 2
@@ -55,30 +67,41 @@ class SinusoidalPositionalEncoding(nn.Module):
 
 
 class FiLM(nn.Module):
-    def __init__(self, input_size: int, output_size: int, max_iter: int):
+    def __init__(self, input_size: int, output_size: int, max_iter: int, memory_efficient: bool):
         super().__init__()
-        self.step_condition = SinusoidalPositionalEncoding(input_size, max_iter)
+        self.step_condition = SinusoidalPositionalEncoding(input_size, max_iter, use_conv=memory_efficient)
+        self.memory_efficient = memory_efficient
         self.input_conv = nn.Conv1d(input_size, input_size, 3, padding=1)
         self.output_conv_1 = nn.Conv1d(input_size, output_size, 3, padding=1)
-        self.output_conv_2 = nn.Conv1d(input_size, output_size, 3, padding=1)
+        if not memory_efficient:
+            self.output_conv_2 = nn.Conv1d(input_size, output_size, 3, padding=1)
         self.reset_parameters()
 
     def reset_parameters(self):
         nn.init.xavier_uniform_(self.input_conv.weight)
-        nn.init.xavier_uniform_(self.output_conv_1.weight)
-        nn.init.xavier_uniform_(self.output_conv_2.weight)
         nn.init.zeros_(self.input_conv.bias)
+        nn.init.xavier_uniform_(self.output_conv_1.weight)
         nn.init.zeros_(self.output_conv_1.bias)
-        nn.init.zeros_(self.output_conv_2.bias)
+        if not self.memory_efficient:
+            nn.init.xavier_uniform_(self.output_conv_2.weight)
+            nn.init.zeros_(self.output_conv_2.bias)
 
     def forward(self, x, t: int):
         x = self.input_conv(x)
         x = F.leaky_relu(x, 0.2)
         x = self.step_condition(x, t)
         shift = self.output_conv_1(x)
-        scale = self.output_conv_2(x)
+        scale = self.output_conv_2(x) if not self.memory_efficient else None
 
         return shift, scale
+
+
+class EmptyFiLM(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x, t):
+        return 0, 1
 
 
 class UBlock(nn.Module):
@@ -98,7 +121,10 @@ class UBlock(nn.Module):
             Conv1d(hidden_size, hidden_size, 3, dilation=dilation[3], padding=dilation[3])
         ])
 
-    def forward(self, x, film_shift, film_scale):
+    def forward(self, x, film_shift, film_scale: tp.Optional[torch.Tensor]):
+        if film_scale is None:
+            film_scale = 1.0
+
         block1 = F.interpolate(x, size=x.shape[-1] * self.factor)
         block1 = self.block1(block1)
 
@@ -176,8 +202,13 @@ class Generator(nn.Module):
         n_hat: (bs, 1, num_frame x 300)
     """
 
-    def __init__(self, num_iteration: int):
+    def __init__(
+        self,
+        num_iteration: int,
+        memory_efficient: bool
+    ):
         super().__init__()
+        self.memory_efficient = memory_efficient
         self.downsample = nn.ModuleList([
             Conv1d(1, 32, 5, padding=2),
             DBlock(32, 128, 2),
@@ -186,11 +217,11 @@ class Generator(nn.Module):
             DBlock(256, 512, 5),
         ])
         self.film = nn.ModuleList([
-            FiLM(32, 128, num_iteration),
-            FiLM(128, 128, num_iteration),
-            FiLM(128, 256, num_iteration),
-            FiLM(256, 512, num_iteration),
-            FiLM(512, 512, num_iteration),
+            FiLM(32, 128, num_iteration, memory_efficient=memory_efficient) if not memory_efficient else EmptyFiLM(),
+            FiLM(128, 128, num_iteration, memory_efficient=memory_efficient),
+            FiLM(128, 256, num_iteration, memory_efficient=memory_efficient),
+            FiLM(256, 512, num_iteration, memory_efficient=memory_efficient),
+            FiLM(512, 512, num_iteration, memory_efficient=memory_efficient),
         ])
         self.upsample = nn.ModuleList([
             UBlock(768, 512, 5, [1, 2, 1, 2]),

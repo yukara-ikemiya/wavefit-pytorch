@@ -6,7 +6,7 @@ generator:
     # Number of WaveFit iteration (e.g. WaveFit-5 -> 5)
     num_iteration: 3
     # Architecture type
-    memory_efficient_miipher2: false
+    memory_efficient_miipher2: true
     # Mel-spectrogram setting
     args_mel:
       sr: 24000

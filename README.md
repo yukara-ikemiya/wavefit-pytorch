@@ -7,8 +7,13 @@ which is **a state-of-the-art lightweight/fast speech vocoder** from Google Rese
 
 This repository supports:
 - 🔥 Full implementation and training code for the `WaveFit` model
+- 🔥 Memory-efficient architecture used in [**Miipher-2**](https://arxiv.org/abs/2505.04457) [3]
 - 🔥 Distributed training with multiple GPUs / multiple Nodes
 
+# 📢 UPDATES
+
+- May 18, 2025: 👋 Now supports memory-efficient WaveFit architecture used in [**Miipher-2**](https://arxiv.org/abs/2505.04457) [3]
+ 
 # Requirements
 
 - Python 3.8.10 or later
@@ -71,6 +76,8 @@ JOB_ID="job_name"
 OUTPUT_DIR=${ROOT_DIR}/output/${MODEL}/${JOB_ID}/
 
 MODEL="wavefit-3"
+# MODEL="wavefit-3_mem-efficient"  #  <- Memory-efficient architecture
+
 BATCH_SIZE=512   # This must be a multiple of GPU number. Please adjust to your environment.
 NUM_WORKERS=8
 
@@ -232,3 +239,4 @@ Additionally, based on insights into stability in GAN training, I have incorpora
 
 1. "WaveFit: An Iterative and Non-autoregressive Neural Vocoder based on Fixed-Point Iteration", Y. Koizumi et al., IEEE SLT, 2022
 1. "WaveGrad: Estimating Gradients for Waveform Generation", N. Chen et al., ICLR, 2021
+1. "Miipher-2: A Universal Speech Restoration Model for Million-Hour Scale Data Restoration", S. Karita et al., 2025
