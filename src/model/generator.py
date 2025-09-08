@@ -224,11 +224,11 @@ class Generator(nn.Module):
             FiLM(512, 512, num_iteration, memory_efficient=memory_efficient),
         ])
         self.upsample = nn.ModuleList([
-            UBlock(768, 512, 5, [1, 2, 1, 2]),
-            UBlock(512, 512, 5, [1, 2, 1, 2]),
+            UBlock(768, 512, 5, [1, 2, 4, 8]),
+            UBlock(512, 512, 5, [1, 2, 4, 8]),
             UBlock(512, 256, 3, [1, 2, 4, 8]),
-            UBlock(256, 128, 2, [1, 2, 4, 8]),
-            UBlock(128, 128, 2, [1, 2, 4, 8]),
+            UBlock(256, 128, 2, [1, 2, 1, 2]),
+            UBlock(128, 128, 2, [1, 2, 1, 2]),
         ])
         self.first_conv = Conv1d(128, 768, 3, padding=1)
         self.last_conv = Conv1d(128, 1, 3, padding=1)
