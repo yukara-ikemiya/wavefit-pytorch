@@ -164,6 +164,7 @@ cython_debug/
 # Outputs
 runs/
 wandb/
+job/
 *.wav
 
 # Container
