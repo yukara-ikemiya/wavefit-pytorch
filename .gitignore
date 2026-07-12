@@ -169,3 +169,6 @@ job/
 
 # Container
 *.sif
+
+# Reference
+reference/
