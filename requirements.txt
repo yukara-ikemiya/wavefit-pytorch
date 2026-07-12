@@ -3,7 +3,9 @@ torchaudio
 numpy
 librosa
 pillow
+matplotlib
 
 accelerate
 hydra-core
 wandb
+ema-pytorch

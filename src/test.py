@@ -7,7 +7,7 @@ sys.dont_write_bytecode = True
 import torch
 import torchaudio
 import hydra
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
 
 from utils.audio_utils import MelSpectrogram
 from model import Generator

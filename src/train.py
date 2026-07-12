@@ -13,6 +13,7 @@ import torch
 import hydra
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
+from ema_pytorch import EMA
 
 from utils.torch_common import get_world_size, count_parameters, set_seed
 from trainer import Trainer
@@ -23,14 +24,16 @@ def main(cfg: DictConfig):
 
     # Update config if ckpt_dir is specified (training resumption)
     if cfg.trainer.ckpt_dir is not None:
-        overrides = HydraConfig.get().overrides.task
-        overrides = [e for e in overrides if isinstance(e, str)]
-        override_conf = OmegaConf.from_dotlist(overrides)
-        cfg = OmegaConf.merge(cfg, override_conf)
-
-        # Load checkpoint configuration
         cfg_ckpt = OmegaConf.load(f'{cfg.trainer.ckpt_dir}/config.yaml')
-        cfg = OmegaConf.merge(cfg_ckpt, override_conf)
+
+        # Keep cfg.data and cfg.trainer
+        if "trainer" in cfg.keys():
+            cfg_ckpt.trainer = cfg.trainer
+        if "data" in cfg.keys():
+            # overwrite the whole data config
+            cfg_ckpt.data = cfg.data
+
+        cfg = cfg_ckpt
 
     # HuggingFace Accelerate for distributed training
 
@@ -84,11 +87,20 @@ def main(cfg: DictConfig):
     opt_D = hydra.utils.instantiate(cfg.optimizer.D.optimizer)(params=discriminator.parameters())
     sche_D = hydra.utils.instantiate(cfg.optimizer.D.scheduler)(optimizer=opt_D)
 
+    # EMA
+
+    ema_G = ema_D = None
+    if accel.is_main_process:
+        ema_G = EMA(generator, **cfg.trainer.ema)
+        ema_D = EMA(discriminator, **cfg.trainer.ema)
+        ema_G.to(accel.device)
+        ema_D.to(accel.device)
+
     # Log
 
     generator.train()
     discriminator.train()
-    num_params_g = count_parameters(generator.generator) / 1e6
+    num_params_g = count_parameters(generator) / 1e6
     num_params_d = count_parameters(discriminator) / 1e6
     if accel.is_main_process:
         print("=== Parameters ===")
@@ -115,8 +127,12 @@ def main(cfg: DictConfig):
     # Start training
 
     trainer = Trainer(
-        generator, discriminator, {'mrstft': mrstft_loss, 'melmae': melmae_loss},
-        opt_G, sche_G, opt_D, sche_D, train_dataloader, test_dataloader,
+        generator, discriminator,
+        {'mrstft': mrstft_loss, 'melmae': melmae_loss},
+        opt_G, sche_G,
+        opt_D, sche_D,
+        ema_G, ema_D,
+        train_dataloader, test_dataloader,
         accel, cfg, ckpt_dir=cfg.trainer.ckpt_dir
     )
 
