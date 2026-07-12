@@ -20,6 +20,13 @@ amp: 'no' # 'fp16'
 # Max norm of gradient clipping
 max_grad_norm: 1.0
 
+# EMA (Exponential Moving Average)
+ema:
+  beta: 0.999
+  update_after_step: 1000
+  update_every: 10
+  include_online_model: false  # only save the EMA model, not the online model
+
 logger:
   project_name: 'project_name'
   run_name: 'run_name'

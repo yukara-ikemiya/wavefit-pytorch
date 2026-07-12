@@ -10,7 +10,7 @@ import wandb
 
 from model import WaveFit, Discriminator
 from utils.logging import MetricsLogger
-from utils.torch_common import sort_dict, print_once
+from utils.torch_common import sort_dict, print_once, exists
 from utils.viz import spectrogram_image
 
 
@@ -22,6 +22,7 @@ class Trainer:
         loss_modules,       # Loss modules
         opt_G, sche_G,      # Optimizer/scheduler of G
         opt_D, sche_D,      # Optimizer/scheduler of D
+        ema_G, ema_D,      # EMA of G and D
         train_dataloader,
         test_dataloader,
         accel,              # Accelerator object
@@ -31,10 +32,9 @@ class Trainer:
         self.G: WaveFit = accel.unwrap_model(G)
         self.D: Discriminator = accel.unwrap_model(D)
         self.loss_modules = loss_modules
-        self.opt_G = opt_G
-        self.sche_G = sche_G
-        self.opt_D = opt_D
-        self.sche_D = sche_D
+        self.opt_G, self.sche_G = opt_G, sche_G
+        self.opt_D, self.sche_D = opt_D, sche_D
+        self.ema_G, self.ema_D = ema_G, ema_D
         self.train_dataloader = train_dataloader
         self.test_dataloader = test_dataloader
         self.accel = accel
@@ -162,6 +162,12 @@ class Trainer:
             self.opt_D.step()
             self.sche_D.step()
 
+            # EMA update
+            if exists(self.ema_G):
+                self.ema_G.update()
+            if exists(self.ema_D):
+                self.ema_D.update()
+
         return {k: v.detach() for k, v in losses.items()}
 
     @torch.no_grad()
@@ -216,16 +222,23 @@ class Trainer:
         idxs = torch.randint(len(dataset), size=(n_sample,))
         audios = torch.stack([dataset[idx][0] for idx in idxs], dim=0).to(self.accel.device)
 
-        # sample
+        # prepare inputs
         mel_spec, r_noise, pstft_spec = self.G.mel.get_shaped_noise(audios)
+        if not getattr(self.G, 'use_noise_input', True):
+            # GAN-WaveNeXt2 starts from silence rather than noise by default
+            # but you can still provide it if needed.
+            r_noise = torch.zeros_like(r_noise) + 1e-8 * torch.randn_like(r_noise)
+
+        # sample
         preds = self.G(r_noise, torch.log(mel_spec.clamp(min=self.EPS)), pstft_spec, return_only_last=True)[-1]
+
         mel_spec_pred = self.G.mel.compute_mel(preds.squeeze(1))
         mel_spec_inoise = self.G.mel.compute_mel(r_noise.squeeze(1))
 
         # save/log audios
         out_dir = self.cfg_t.output_dir + '/sample'
         os.makedirs(out_dir, exist_ok=True)
-        columns = ['gt (audio)', 'gt (spec)', 'init_noise (audio)', 'init_noise (spec)', 'pred (audio)', 'pred (spec)']
+        columns = ['gt (audio)', 'gt (spec)', 'init_input (audio)', 'init_input (spec)', 'pred (audio)', 'pred (spec)']
         table_audio = wandb.Table(columns=columns)
         for idx in range(audios.shape[0]):
             torchaudio.save(f"{out_dir}/item-{idx}_gt.wav", audios[idx].cpu(), sample_rate=dataset.sr, encoding='PCM_F')
@@ -276,6 +289,12 @@ class Trainer:
         if self.states['latest_metrics'] == self.states['best_metrics']:
             shutil.copytree(latest_dir, out_dir + '/best', dirs_exist_ok=True)
 
+        # save EMA weights
+        if exists(self.ema_G):
+            torch.save(self.ema_G.state_dict(), f"{latest_dir}/ema_G.pth")
+        if exists(self.ema_D):
+            torch.save(self.ema_D.state_dict(), f"{latest_dir}/ema_D.pth")
+
         print("\t->->-> Saved checkpoints.")
 
     def __load_ckpt(self, dir: str):
@@ -290,6 +309,22 @@ class Trainer:
                  'sche_d': self.sche_D}
         for k, v in ckpts.items():
             v.load_state_dict(torch.load(f"{dir}/{k}.pth", weights_only=False))
+
+        # EMA
+        if exists(self.ema_G):
+            if os.path.exists(f"{dir}/ema_G.pth"):
+                ema_state_g = torch.load(f"{dir}/ema_G.pth", map_location='cpu', weights_only=False)
+                self.ema_G.load_state_dict(ema_state_g)
+            else:
+                self.ema_G.model = self.G
+                self.ema_G.init_ema()
+        if exists(self.ema_D):
+            if os.path.exists(f"{dir}/ema_D.pth"):
+                ema_state_d = torch.load(f"{dir}/ema_D.pth", map_location='cpu', weights_only=False)
+                self.ema_D.load_state_dict(ema_state_d)
+            else:
+                self.ema_D.model = self.D
+                self.ema_D.init_ema()
 
         with open(f"{dir}/states.json", mode="rt", encoding="utf-8") as f:
             self.states.update(json.load(f))

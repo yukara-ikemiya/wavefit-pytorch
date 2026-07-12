@@ -12,7 +12,7 @@ import hydra
 import torch
 import torchaudio
 from accelerate import Accelerator
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import OmegaConf
 
 from utils.torch_common import get_rank, get_world_size, print_once
 from data.dataset import get_audio_filenames
@@ -93,15 +93,28 @@ def main():
     print_once(f"Input audio dir : {input_audio_dir}")
     print_once(f"Output dir      : {output_dir}")
 
-    # Load WaveFit model
+    # Load model
     cfg_ckpt = OmegaConf.load(f'{ckpt_dir}/config.yaml')
-    wavefit = hydra.utils.instantiate(cfg_ckpt.model.generator.model)
-    wavefit.load_state_dict(torch.load(f"{ckpt_dir}/generator.pth", weights_only=False))
-    wavefit.to(device)
-    wavefit.eval()
-    print_once("->-> Successfully loaded WaveFit model from checkpoint.")
+    generator = hydra.utils.instantiate(cfg_ckpt.model.generator.model)
 
-    hop_size = wavefit.args_mel['hop_size']
+    model_name = generator.__class__.__name__
+    print_once(f"Model class   : {model_name}")
+
+    use_ema_ckpt = os.path.exists(f"{ckpt_dir}/ema_G.pth")
+    if use_ema_ckpt:
+        print_once("->-> Found EMA checkpoint. Loading model weights from ema_G.pth.")
+        raw = torch.load(f"{ckpt_dir}/ema_G.pth", map_location="cpu", weights_only=False)
+        state_dict = {k[len("ema_model."):]: v for k, v in raw.items() if k.startswith("ema_model.")}
+    else:
+        print_once("->-> No EMA checkpoint found. Loading model weights from generator.pth.")
+        state_dict = torch.load(f"{ckpt_dir}/generator.pth", weights_only=False)
+
+    generator.load_state_dict(state_dict)
+    generator.to(device)
+    generator.eval()
+    print_once(f"->-> Successfully loaded {model_name} model from checkpoint.")
+
+    hop_size = generator.args_mel['hop_size']
     overlap = math.ceil(sample_size * overlap_rate / hop_size) * hop_size
 
     # Get audio files
@@ -123,8 +136,8 @@ def main():
         for n in range(n_iter):
             batch_ = audio_batch[n * max_batch_size:(n + 1) * max_batch_size]
             with torch.no_grad():
-                mel_spec, r_noise, pstft_spec = wavefit.mel.get_shaped_noise(batch_)
-                pred = wavefit(r_noise, torch.log(mel_spec.clamp(min=1e-8)), pstft_spec, return_only_last=True)[-1]
+                mel_spec, r_noise, pstft_spec = generator.mel.get_shaped_noise(batch_)
+                pred = generator(r_noise, torch.log(mel_spec.clamp(min=1e-8)), pstft_spec, return_only_last=True)[-1]
 
             preds.append(pred)
 

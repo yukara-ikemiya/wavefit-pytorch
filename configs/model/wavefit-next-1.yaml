@@ -1,0 +1,68 @@
+
+generator:
+
+  model:
+    _target_: model.WaveFitNeXt
+    # Number of GAN-WaveNeXt2 iteration (i.e. number of independent WaveNeXt sub-models).
+    # Unlike WaveFit, generator size grows linearly with this value (~15.25M params per step),
+    # so increasing it trades model size for quality. Override e.g. with
+    # `model.generator.model.num_iteration=5` for a WaveNeXt2-5 model.
+    num_iteration: 1
+    # FFT size used by the internal STFT module that conditions each sub-model on the
+    # waveform predicted by the previous one (Sec.3.1 of the WaveNeXt2 paper). Kept smaller
+    # than args_mel.n_fft to keep this conditioning path lightweight.
+    n_fft_stft: 1024
+    # Mel-spectrogram setting
+    args_mel:
+      sr: 24000
+      n_fft: 2048
+      win_size: 1200
+      hop_size: 300
+      n_mels: 128
+      fmin: 20.0
+      fmax: 12000.0
+    # Architecture of each WaveNeXt sub-model (ConvNeXt stack)
+    generator_args:
+      hidden_dim: 512
+      intermediate_dim: 1536
+      num_layers: 8
+      kernel_size: 7
+
+
+discriminator:
+
+  model:
+    _target_: model.Discriminator
+    num_D: 3
+    ndf: 16
+    n_layers: 4
+    downsampling_factor: 4
+
+
+loss:
+
+  mrstft:
+    _target_: loss.MRSTFTLoss
+    n_ffts: [512, 1024, 2048]
+    win_sizes: [360, 900, 1800]
+    hop_sizes: [80, 150, 300]
+
+  melmae:
+    _target_: loss.MELMAELoss
+    sr: 24000
+    n_fft: 1024
+    win_size: 900
+    hop_size: 150
+    n_mels: 128
+    fmin: 20.0
+    fmax: 12000.
+
+  # Weights of each loss
+  # This is the LibriTTS setting in the WaveFit paper (Sec.5.1), reused here since
+  # GAN-WaveNeXt2 is trained with the same STFT/Mel/adversarial losses as WaveFit.
+  lambdas:
+    G/disc_gan_loss: 1.0
+    G/disc_feat_loss: 10.0
+    G/mrstft_sc_loss: 2.5
+    G/mrstft_mag_loss: 2.5
+    G/mel_mae_loss: 0.0

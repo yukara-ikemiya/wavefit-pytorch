@@ -6,12 +6,14 @@ which is **a state-of-the-art lightweight/fast speech vocoder** from Google Rese
 ![WaveFit](./assets/fig/wavefit.png)
 
 This repository supports:
-- 🔥 Full implementation and training code for the `WaveFit` model
+- 🔥 Full implementation and training code for the `WaveFit` [1] model
 - 🔥 Memory-efficient architecture used in [**Miipher-2**](https://arxiv.org/abs/2505.04457) [3]
+- 🔥 `GAN-WaveNeXt2` (WaveFitNeXt) [6], a WaveNeXt-based generator that trades model size for a large speed-up of both training and inference over `WaveFit`
 - 🔥 Distributed training with multiple GPUs / multiple Nodes
 
 # 📢 UPDATES
 
+- Jul 7, 2026: 👋 Now supports `GAN-WaveNeXt2` (WaveFitNeXt) [6], a fast `WaveNeXt`-based [4] alternative generator
 - May 18, 2025: 👋 Now supports memory-efficient WaveFit architecture used in [**Miipher-2**](https://arxiv.org/abs/2505.04457) [3]
  
 # Requirements
@@ -55,6 +57,42 @@ for logging training information.
 $ WANDB_API_KEY="12345x6789y..."
 ```
 
+# Model architectures
+
+This repository provides two generator architectures, selectable through the `model=` Hydra config.
+
+| Config | Class | Generator |
+| --- | --- | --- |
+| `wavefit-3` | `WaveFit` | WaveGrad-style U-Net, shared across all iteration steps and conditioned on a step embedding [1] |
+| `wavefit-3_mem-efficient` | `WaveFit` | WaveFit with memory-efficient architecture in Miipher-2 [3] |
+| `wavefit-next-3` | `WaveFitNeXt` | `WaveNeXt`[4]-style ConvNeXt stack (no iSTFT layer, no hierarchical up-sampling), one **independent** sub-model per iteration step [6] |
+
+`GAN-WaveNeXt2` follows the same fixed-point iteration / residual-prediction training scheme as `WaveFit`.
+But there are two key differences that trade model size for speed:
+- Each step is handled by its own generator instead of one generator shared across steps,
+following the sub-modeling idea of [5]. Because of this, the total generator size grows linearly with `num_iteration`
+  (roughly 14.6M parameters per step with the default `generator_args`, within ~3% of the ~15M/step
+  scaling reported in Table 1 of the WaveNeXt2 paper [6]).
+- The generator itself runs entirely at the mel-frame rate and reshapes a per-frame linear projection into
+  raw audio, which is far cheaper than `WaveFit`'s hierarchical WaveGrad-style up-sampling.
+- [Minor difference] : Unlike `WaveFit`, iteration starts from silence rather than noise, and no gain-adjustment module is used.
+
+## Model size and computational cost
+
+Per-iteration parameter count and FLOPs measured on 1s of audio @ 24kHz
+(via [scripts/compare_model.py](scripts/compare_model.py)):
+
+| Model | FLOPs / sec of audio | Total params (`3 iter`) |
+| --- | :---: | :---: |
+| `WaveFit` | 204.64 G | 15.51 M |
+| `WaveFitNeXt` (GAN-WaveNeXt2) | 7.30 G | 45.75 M |
+
+`WaveFitNeXt` uses one **independent** sub-model per iteration step, so its total
+parameter count scales linearly with `num_iteration`, while `WaveFit` shares a single
+generator across all steps. In exchange, `WaveFitNeXt` requires roughly **28x fewer
+FLOPs per iteration** thanks to its mel-frame-rate ConvNeXt stack.
+
+
 # Training
 
 ## Training from scratch
@@ -77,6 +115,7 @@ OUTPUT_DIR=${ROOT_DIR}/output/${MODEL}/${JOB_ID}/
 
 MODEL="wavefit-3"
 # MODEL="wavefit-3_mem-efficient"  #  <- Memory-efficient architecture
+# MODEL="wavefit-next-3"          #  <- GAN-WaveNeXt2, see "Model architectures" above
 
 BATCH_SIZE=512   # This must be a multiple of GPU number. Please adjust to your environment.
 NUM_WORKERS=8
@@ -231,12 +270,22 @@ Additionally, based on insights into stability in GAN training, I have incorpora
 - Learning rate warm-up
 - Learning rate decaying
 
-# TODO
+## 5. GAN-WaveNeXt2 (WaveFitNeXt) architecture
 
-- [x] Useful inference scripts
+The implementation of `GAN-WaveNeXt2` here follows [6], which left several architectural details unspecified. The followings show what's still an assumption:
+
+- **Merging of STFT and Mel spectrogram** ([6], Sec.3.1): the previous sub-model's waveform is transformed with a centered, Hann-windowed STFT, truncated along time to match the mel-spectrogram's frame count. The *real* and *imaginary* parts of the complex spectrogram are then concatenated — the full real part together with the imaginary part **excluding its DC and Nyquist bins** — giving `n_fft` conditioning channels per frame.
+This STFT spectrogram is fed into WaveNeXt-based generator along with Mel-spectrogram input.
+Since the details of these merging methods are not well documented, this repository performs concatenation in the channel dimension and projection collectively using a convolution layer with kernel size of 3.
+- **Parameter size of WaveFitNeXt**: [6] does not state the ConvNeXt
+  channel/expansion sizes, so `hidden_dim=512` / `intermediate_dim=1536` (`Vocos`-scale) are still an assumption. With `num_layers=8`, this implementation lands at ~15.25M
+  parameters per sub-model, which is still different from the parameter size described in the paper (14.96M).
 
 # References
 
 1. "WaveFit: An Iterative and Non-autoregressive Neural Vocoder based on Fixed-Point Iteration", Y. Koizumi et al., IEEE SLT, 2022
 1. "WaveGrad: Estimating Gradients for Waveform Generation", N. Chen et al., ICLR, 2021
 1. "Miipher-2: A Universal Speech Restoration Model for Million-Hour Scale Data Restoration", S. Karita et al., 2025
+1. "WaveNeXt: ConvNeXt-based fast neural vocoder without iSTFT layer", T. Okamoto et al., IEEE ASRU, 2023
+1. "Noise Level Limited Sub-Modeling for Diffusion Probabilistic Vocoders", T. Okamoto et al., ICASSP, 2021
+1. "WaveNeXt 2: ConvNeXt-Based Fast Neural Vocoders With Residual Denoising and Sub-Modeling for GAN and Diffusion Models", W. Zhou et al., arXiv:2605.25506, 2026
