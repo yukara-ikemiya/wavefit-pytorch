@@ -8,7 +8,7 @@ which is **a state-of-the-art lightweight/fast speech vocoder** from Google Rese
 This repository supports:
 - 🔥 Full implementation and training code for the `WaveFit` [1] model
 - 🔥 Memory-efficient architecture used in [**Miipher-2**](https://arxiv.org/abs/2505.04457) [3]
-- 🔥 `GAN-WaveNeXt2` (WaveFitNeXt) [6], a WaveNeXt-based generator that trades model size for a large speed-up of both training and inference over `WaveFit`
+- 🔥 `GAN-WaveNeXt2` (WaveFitNeXt) [6], a WaveNeXt-based generator that trades model size for a large speed-up of inference over `WaveFit`
 - 🔥 Distributed training with multiple GPUs / multiple Nodes
 
 # 📢 UPDATES
@@ -79,7 +79,7 @@ following the sub-modeling idea of [5]. Because of this, the total generator siz
 
 ## Model size and computational cost
 
-Per-iteration parameter count and FLOPs measured on 1s of audio @ 24kHz
+Parameter count and FLOPs measured on 1s of audio @ 24kHz
 (via [scripts/compare_model.py](scripts/compare_model.py)):
 
 | Model | FLOPs / sec of audio | Total params (`3 iter`) |
